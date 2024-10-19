@@ -13,7 +13,6 @@
 #include "AppSettings.h"
 #include "Logger.h"
 #include "ScalingMode.h"
-#include <dxgi.h>
 #include "ScalingService.h"
 #include "FileDialogHelper.h"
 #include "CommonSharedConstants.h"
@@ -26,34 +25,6 @@ using namespace Windows::UI::Xaml::Media::Imaging;
 using namespace ::Magpie::Core;
 
 namespace winrt::Magpie::App::implementation {
-
-static SmallVector<std::wstring> GetAllGraphicsCards() {
-	com_ptr<IDXGIFactory1> dxgiFactory;
-	HRESULT hr = CreateDXGIFactory1(IID_PPV_ARGS(&dxgiFactory));
-	if (FAILED(hr)) {
-		return {};
-	}
-
-	SmallVector<std::wstring> result;
-
-	com_ptr<IDXGIAdapter1> adapter;
-	for (UINT adapterIndex = 0;
-		SUCCEEDED(dxgiFactory->EnumAdapters1(adapterIndex, adapter.put()));
-		++adapterIndex
-		) {
-		DXGI_ADAPTER_DESC1 desc;
-		hr = adapter->GetDesc1(&desc);
-
-		// 不包含 WARP
-		if (desc.Flags & DXGI_ADAPTER_FLAG_SOFTWARE) {
-			continue;
-		}
-
-		result.emplace_back(SUCCEEDED(hr) ? desc.Description : L"???");
-	}
-
-	return result;
-}
 
 ProfileViewModel::ProfileViewModel(int profileIdx) : _isDefaultProfile(profileIdx < 0) {
 	if (_isDefaultProfile) {
@@ -120,8 +91,8 @@ ProfileViewModel::ProfileViewModel(int profileIdx) : _isDefaultProfile(profileId
 	}
 
 	_graphicsCards = GetAllGraphicsCards();
-	if (_data->graphicsCard >= _graphicsCards.size()) {
-		_data->graphicsCard = -1;
+	if (_data->graphicsCardId.idx >= _graphicsCards.size()) {
+		_data->graphicsCardId.idx = -1;
 	}
 }
 
@@ -469,7 +440,7 @@ IVector<IInspectable> ProfileViewModel::GraphicsCards() const noexcept {
 }
 
 int ProfileViewModel::GraphicsCard() const noexcept {
-	return _data->graphicsCard + 1;
+	return _data->graphicsCardId.idx + 1;
 }
 
 void ProfileViewModel::GraphicsCard(int value) {
@@ -478,11 +449,11 @@ void ProfileViewModel::GraphicsCard(int value) {
 	}
 
 	--value;
-	if (_data->graphicsCard == value) {
+	if (_data->graphicsCardId.idx == value) {
 		return;
 	}
 
-	_data->graphicsCard = value;
+	_data->graphicsCardId.idx = value;
 	AppSettings::Get().SaveAsync();
 
 	RaisePropertyChanged(L"GraphicsCard");

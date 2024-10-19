@@ -30,6 +30,7 @@
 #include "EffectsService.h"
 #include "UpdateService.h"
 #include "LocalizationService.h"
+#include "AdaptersService.h"
 #include "Logger.h"
 
 namespace winrt::Magpie::App::implementation {
@@ -91,6 +92,11 @@ StartUpOptions App::Initialize(int) {
 		return result;
 	}
 
+	if (!AdaptersService::Get().Initialize()) {
+		result.IsError = true;
+		return result;
+	}
+
 	result.IsError = false;
 	result.MainWindowCenter = settings.MainWindowCenter();
 	result.MainWindowSizeInDips = settings.MainWindowSizeInDips();
@@ -110,6 +116,7 @@ void App::Uninitialize() {
 	// 不显示托盘图标的情况下关闭主窗口仍会在后台驻留数秒，推测和 XAML Islands 有关
 	// 这里提前取消热键注册，这样关闭 Magpie 后立即重新打开不会注册热键失败
 	ShortcutService::Get().Uninitialize();
+	AdaptersService::Get().Uninitialize();
 }
 
 bool App::IsShowNotifyIcon() const noexcept {

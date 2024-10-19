@@ -50,7 +50,7 @@ struct WinRTUtils {
 
 		EventRevoker operator()(winrt::auto_revoke_t, const T& handler) {
 			winrt::event_token token = operator()(handler);
-			return WinRTUtils::EventRevoker([this, token]() {
+			return EventRevoker([this, token]() {
 				// 调用者应确保此函数在 Event 的生命周期内执行
 				operator()(token);
 			});

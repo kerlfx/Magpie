@@ -248,7 +248,7 @@ bool ScalingService::_StartScale(HWND hWnd, const Profile& profile) {
 		return false;
 	}
 	
-	options.graphicsCard = profile.graphicsCard;
+	options.graphicsCardId = profile.graphicsCardId;
 	options.captureMethod = profile.captureMethod;
 	if (profile.isFrameRateLimiterEnabled) {
 		options.maxFrameRate = profile.maxFrameRate;

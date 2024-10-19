@@ -14,6 +14,7 @@
 #include "ScalingMode.h"
 #include "LocalizationService.h"
 #include <ShellScalingApi.h>
+#include <dxgi.h>
 
 #pragma comment(lib, "Shcore.lib")
 
@@ -86,7 +87,14 @@ static void WriteProfile(rapidjson::PrettyWriter<rapidjson::StringBuffer>& write
 	writer.Uint((uint32_t)profile.multiMonitorUsage);
 
 	writer.Key("graphicsCard");
-	writer.Int(profile.graphicsCard);
+	writer.StartObject();
+	writer.Key("idx");
+	writer.Int(profile.graphicsCardId.idx);
+	writer.Key("vendorId");
+	writer.Uint(profile.graphicsCardId.vendorId);
+	writer.Key("deviceId");
+	writer.Uint(profile.graphicsCardId.deviceId);
+	writer.EndObject();
 	writer.Key("frameRateLimiterEnabled");
 	writer.Bool(profile.isFrameRateLimiterEnabled);
 	writer.Key("maxFrameRate");
@@ -737,6 +745,48 @@ void AppSettings::_LoadSettings(const rapidjson::GenericObject<true, rapidjson::
 	}
 }
 
+static GraphicsCardId GetGraphicsCardIdFromIdx(int idx) noexcept {
+	GraphicsCardId result;
+
+	if (idx < 0) {
+		// 使用默认显卡
+		return result;
+	}
+
+	com_ptr<IDXGIFactory1> dxgiFactory;
+	HRESULT hr = CreateDXGIFactory1(IID_PPV_ARGS(&dxgiFactory));
+	if (FAILED(hr)) {
+		Logger::Get().ComError("CreateDXGIFactory1 失败", hr);
+		return result;
+	}
+
+	com_ptr<IDXGIAdapter1> adapter;
+	hr = dxgiFactory->EnumAdapters1(idx, adapter.put());
+	if (FAILED(hr)) {
+		// 可能因为该显卡已不存在
+		Logger::Get().ComError("EnumAdapters1 失败", hr);
+		return result;
+	}
+
+	DXGI_ADAPTER_DESC1 desc;
+	hr = adapter->GetDesc1(&desc);
+	if (FAILED(hr)) {
+		Logger::Get().ComError("GetDesc1 失败", hr);
+		return result;
+	}
+
+	if (desc.Flags & DXGI_ADAPTER_FLAG_SOFTWARE) {
+		// 不使用 WARP
+		return result;
+	}
+
+	// 不检查 FL11，由 AdaptersService 检查
+	result.idx = idx;
+	result.vendorId = desc.VendorId;
+	result.deviceId = desc.DeviceId;
+	return result;
+}
+
 bool AppSettings::_LoadProfile(
 	const rapidjson::GenericObject<true, rapidjson::Value>& profileObj,
 	Profile& profile,
@@ -822,12 +872,40 @@ bool AppSettings::_LoadProfile(
 		profile.multiMonitorUsage = (MultiMonitorUsage)multiMonitorUsage;
 	}
 	
-	if (!JsonHelper::ReadInt(profileObj, "graphicsCard", profile.graphicsCard, true)) {
-		// v0.10.0-preview1 使用 graphicsAdapter
-		uint32_t graphicsAdater = 0;
-		JsonHelper::ReadUInt(profileObj, "graphicsAdapter", graphicsAdater);
-		profile.graphicsCard = (int)graphicsAdater - 1;
+	{
+		auto graphicsCardIdNode = profileObj.FindMember("graphicsCardId");
+		if (graphicsCardIdNode == profileObj.end()) {
+			// v0.10 和 v0.11 只使用索引
+			int graphicsCard = -1;
+			if (!JsonHelper::ReadInt(profileObj, "graphicsCard", graphicsCard, true)) {
+				// v0.10.0-preview1 使用 graphicsAdapter
+				uint32_t graphicsAdater = 0;
+				JsonHelper::ReadUInt(profileObj, "graphicsAdapter", graphicsAdater);
+				graphicsCard = (int)graphicsAdater - 1;
+			}
+
+			profile.graphicsCardId = GetGraphicsCardIdFromIdx(graphicsCard);
+		} else if (graphicsCardIdNode->value.IsObject()) {
+			auto graphicsCardIdObj = graphicsCardIdNode->value.GetObj();
+
+			auto idxNode = graphicsCardIdObj.FindMember("idx");
+			if (idxNode != graphicsCardIdObj.end() && idxNode->value.IsInt()) {
+				profile.graphicsCardId.idx = idxNode->value.GetInt();
+			}
+
+			auto vendorIdNode = graphicsCardIdObj.FindMember("vendorId");
+			if (vendorIdNode != graphicsCardIdObj.end() && vendorIdNode->value.IsUint()) {
+				profile.graphicsCardId.vendorId = vendorIdNode->value.GetUint();
+			}
+
+			auto deviceIdNode = graphicsCardIdObj.FindMember("deviceId");
+			if (deviceIdNode != graphicsCardIdObj.end() && deviceIdNode->value.IsUint()) {
+				profile.graphicsCardId.deviceId = deviceIdNode->value.GetUint();
+			}
+		}
 	}
+	
+	
 
 	JsonHelper::ReadBool(profileObj, "frameRateLimiterEnabled", profile.isFrameRateLimiterEnabled);
 	JsonHelper::ReadFloat(profileObj, "maxFrameRate", profile.maxFrameRate);

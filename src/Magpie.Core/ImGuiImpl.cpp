@@ -26,15 +26,16 @@ bool ImGuiImpl::Initialize(DeviceResources* deviceResources) noexcept {
 		Logger::Get().Error("ImGui 的头文件与链接库版本不同");
 		return false;
 	}
-#endif // _DEBUG
+#endif
 
 	ImGui::CreateContext();
 
 	// Setup backend capabilities flags
 	ImGuiIO& io = ImGui::GetIO();
-	io.BackendPlatformUserData = nullptr;
 	io.BackendPlatformName = "Magpie";
 	io.ConfigFlags |= ImGuiConfigFlags_NavNoCaptureKeyboard | ImGuiConfigFlags_NoMouseCursorChange;
+	// 禁用 imgui 原生配置文件
+	io.IniFilename = nullptr;
 
 	if (!_backend.Initialize(deviceResources)) {
 		Logger::Get().Error("初始化 ImGuiBackend 失败");
